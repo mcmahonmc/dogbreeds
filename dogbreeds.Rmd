@@ -1,0 +1,245 @@
+---
+title: "Dog Breeds"
+author: "Megan McMahon"
+date: "2/2/2022"
+output: html_document
+---
+
+## Questions
+1. Which dog breeds are the most popular? Has this changed over the past several years?
+2. What attributes are most important for predicting dog breed rankings?
+3. How do the top 5 dog breeds score on those key attributes?
+
+Data obtained from [https://github.com/rfordatascience/tidytuesday/tree/master/data/2022/2022-02-01](TidyTuesday repository on Github.)
+
+Thomas Mock (2022). Tidy Tuesday: A weekly data project aimed at the R ecosystem. https://github.com/rfordatascience/tidytuesday.
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+
+setwd(getwd())
+
+library(tidyverse)
+library(randomForest)
+library(ggimage)
+library(plotly)
+library(magick)
+library(knitr)
+
+breed_traits <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2022/2022-02-01/breed_traits.csv')
+trait_description <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2022/2022-02-01/trait_description.csv')
+breed_rank_all <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2022/2022-02-01/breed_rank.csv')
+
+df <- merge(breed_rank_all, breed_traits, by='Breed')
+colnames(df) <- make.names(colnames(df), unique=TRUE)
+
+df <- df %>%
+  mutate(across(where(is.numeric), as.integer))
+
+# pdf_names <- paste0("img/", df$Breed, ".jpg")
+# safe_download <- safely(~ download.file(.x , .y))
+# walk2(df$Image, pdf_names, safe_download)
+# 
+# 
+# for (i in pdf_names){
+#   img1 <- image_read(i, 'bw')
+#   img_new <- image_transparent(image_median(image_contrast(img1), radius=3), 'white')
+#   image_write(img_new, path = paste0(substr(i, 1, nchar(i)-4), '_new.png'), format = "png")
+# }
+# 
+df$LocalImage <- list.files(path='img/', pattern='*_new.png', full.names = TRUE)
+
+```
+
+### Quick snapshot
+
+```{r}
+kable(head(df))
+```
+
+Any missing values?
+
+```{r fig.width = 7}
+
+missing.values <- df %>%
+  gather(key = "key", value = "val") %>%
+  mutate(isna = is.na(val)) %>%
+  group_by(key) %>%
+  mutate(total = n()) %>%
+  group_by(key, total, isna) %>%
+  summarise(num.isna = n()) %>%
+  mutate(pct = num.isna / total * 100)
+
+levels <-
+    (missing.values  %>% filter(isna == T) %>% arrange(desc(pct)))$key
+
+percentage.plot <- missing.values %>%
+      ggplot() +
+        geom_bar(aes(x = reorder(key, desc(pct)), 
+                     y = pct, fill=isna), 
+                 stat = 'identity', alpha=0.8) +
+      scale_x_discrete(limits = levels) +
+      scale_fill_manual(name = "", 
+                        values = c('steelblue', 'tomato3'), labels = c("Present", "Missing")) +
+      coord_flip() +
+      labs(title = "Percentage of missing values", x =
+             'Variable', y = "% of missing values")
+
+percentage.plot
+
+```
+
+
+## Which dog breeds were the favorite in 2020?
+
+```{r}
+
+n_topdogs <- 10
+df %>%
+  pivot_longer(contains("Rank"), names_to = "Year", values_to = "Rank") %>%
+  mutate(Year = substr(Year, 2, 5)) %>%
+  filter(Year == "2020") %>%
+  slice_min(order_by = Rank, n = n_topdogs) %>%
+  mutate(Place = order(order(Rank, decreasing=FALSE), decreasing=FALSE)) %>%
+  mutate(Order = order(Place, decreasing=TRUE)) %>%
+  select(Year, Rank, Place, Order, Breed, LocalImage) %>%
+  ggplot(aes(x=Place, y=Order, group=Breed, fill=Breed, label=Breed)) +
+  geom_col() + 
+  geom_image(aes(image=LocalImage), size=.12) + geom_text(aes(label = Breed), nudge_y = -1) +
+  theme_minimal() + theme(axis.text.x = element_text(angle = 45, vjust = .5, hjust=1)) +
+  scale_fill_brewer(palette="Set3") + ylim(0, n_topdogs+1) +ggtitle("Top Dogs in 2020")
+
+```
+
+
+## Which dog breeds are the favorites over the years?
+
+Let's look at the top 10 dog breeds since 2013.
+
+```{r fig.height=11,fig.width = 20}
+
+df %>%
+  pivot_longer(contains("Rank"), names_to = "Year", values_to = "Rank") %>%
+  mutate(Year = substr(Year, 2, 5)) %>%
+  # filter(Year > 2017) %>%
+  group_by(Year) %>%
+  slice_min(order_by = Rank, n = n_topdogs) %>%
+  mutate(Place = order(order(Rank, decreasing=FALSE), decreasing=FALSE)) %>%
+  mutate(Order = order(Place, decreasing=TRUE)) %>%
+  select(Year, Rank, Place, Order, Breed, LocalImage) %>%
+  ggplot(aes(x=Place, y=Order, group=Breed, fill=Breed, label=Breed)) +
+  geom_col() + facet_wrap(~ Year, scales = "free_x", nrow=2) +
+  geom_image(aes(image=LocalImage), size=.12) + geom_text(aes(label = Breed), nudge_y = -.5) +
+  theme_classic() + theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) +
+  scale_fill_brewer(palette="Set3") + ylim(0, n_topdogs+1)
+  
+```
+There are definitely some crowd favorites, like bulldogs (aw), beagles, poodles, rottweilers, boxers, the beloved weiner dog, and havenese. Chihuahuas have had their time in the sun, as have Brittanies. Pugs are starting to become more popular, holding tenth place down solid since 2016.
+
+
+
+## What are the most important traits for predicting the overall ranking in 2020?
+
+Using random forest, we can see how important the different traits are for the 2020 ranking.
+
+```{r, echo=TRUE}
+rf1 <- randomForest(X2020.Rank ~ . , data = select(df, -colnames(df)[grepl("X201[0-9].Rank", colnames(df))], -LocalImage, -Image, -links, -Breed), importance=TRUE) # fit the random forest with default parameter
+```
+
+Let's take a look at the importance, evaluated using the percent increase in MSE (higher is more important).
+
+```{r}
+imp <- as.data.frame(importance(rf1,type=1, scale=TRUE))
+imp <- rownames_to_column(imp)
+colnames(imp) <- c('Attribute', 'Importance')
+
+plotVars <- imp %>%
+  mutate_at(vars(Importance), as.numeric) %>%
+  arrange(desc(Importance)) %>%
+  top_n(Importance, 5) %>%
+  select(Attribute) %>%
+  .$Attribute
+
+p0 <- imp %>%
+  mutate_at(vars(Importance), as.numeric) %>%
+  arrange(desc(Importance)) %>%
+  top_n(Importance, 5) %>%
+  ggplot(aes(x=Attribute, y=Importance, fill=Attribute)) +
+  geom_col() + theme_classic() + scale_fill_brewer(palette='Set2') +
+  theme(axis.text.x = element_text(angle = 20, hjust=1)) + ylab('% Increase MSE') 
+
+ggplotly(p0)
+```
+
+
+
+## What do these scores mean? 
+
+We can check out the trait description table to see how each of these measures was coded. I wish I could take these survey! Look at those value assignments for upper and lower bounds!
+
+```{r echo=FALSE}
+trait_description$traitID <- make.names(trait_description$Trait)
+kable(trait_description %>% filter(traitID %in% plotVars) %>% select(-traitID))
+
+```
+
+
+
+## How did the top dog breeds score on these key traits?
+
+Using a boxplot to see the difference in distributions across traits between the top 25% (alphas) of dogs according to the 2020 ranking tend to score compared to the other 75% (betas?)
+
+Disclaimer: All dogs are alpha to me, except for my dog, who is the super alpha.
+
+```{r}
+p2 <- df %>%
+  select(X2020.Rank, plotVars) %>%
+  mutate(RankGroup = ifelse(X2020.Rank <= quantile(df$X2020.Rank, probs=.25),"Alpha", "Beta")) %>%
+  mutate(across(where(is.numeric), as.character)) %>%
+  pivot_longer(plotVars, names_to='Attribute', values_to='Score') %>%
+  ggplot(aes(x=RankGroup, y=Score, group=RankGroup, fill=RankGroup)) +
+  geom_boxplot() + 
+  facet_wrap(~ Attribute, scales='free') + 
+  scale_fill_brewer(palette='Set2') +
+  theme_minimal()
+
+ggplotly(p2)
+
+```
+
+
+
+## How do tippy top dogs score on the most important traits?
+
+Bringing this back around to the favorite top 10
+```{r}
+p <- df %>%
+  pivot_longer(contains("Rank"), names_to = "Year", values_to = "Rank") %>%
+  mutate(Year = substr(Year, 2, 5)) %>%
+  filter(Year > 2017) %>%
+  group_by(Year) %>%
+  slice_min(order_by = Rank, n = n_topdogs) %>%
+  select(Year, Breed, LocalImage, plotVars) %>%
+  mutate(across(where(is.numeric), as.character)) %>%
+  pivot_longer(plotVars, names_to='Attribute', values_to='Score') %>%
+  ggplot(aes(x=Score, fill=Breed)) +
+  geom_histogram(stat="count") + facet_wrap(~ Attribute, scales = "free_x") +
+  theme_void() + 
+  scale_fill_brewer(palette="Set2") + ylab("Count")
+
+ggplotly(p)
+
+```
+
+## My favorite dog?
+
+![Jack, my best bud](bestdog.jpeg)
+
+
+
+
+
+
+
+
+
