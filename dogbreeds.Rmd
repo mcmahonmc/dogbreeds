@@ -170,6 +170,8 @@ breed_rank_all %>%
   scale_fill_brewer(palette="Set3") +
   scale_y_reverse() + theme(axis.text.y = element_blank())
 
+ggsave("topdogs_year.png", dpi=300)
+
 ```
 
 Ok, maybe we should look at another graph without the cute pictures?
