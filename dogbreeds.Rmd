@@ -30,15 +30,12 @@ breed_traits <- readr::read_csv('https://raw.githubusercontent.com/rfordatascien
 trait_description <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2022/2022-02-01/trait_description.csv')
 breed_rank_all <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2022/2022-02-01/breed_rank.csv')
 
-df <- merge(breed_rank_all, breed_traits, by='Breed')
-colnames(df) <- make.names(colnames(df), unique=TRUE)
+# breed_rank_all$BreedID <- substr(breed_rank_all$Breed, 1, 6)
+# breed_traits$BreedID <- substr(breed_traits$Breed, 1, 5)
 
-df <- df %>%
-  mutate(across(where(is.numeric), as.integer))
-
-# pdf_names <- paste0("img/", df$Breed, ".jpg")
+# pdf_names <- paste0("img/", breed_rank_all$Breed, ".jpg")
 # safe_download <- safely(~ download.file(.x , .y))
-# walk2(df$Image, pdf_names, safe_download)
+# walk2(breed_rank_all$Image, pdf_names, safe_download)
 # 
 # 
 # for (i in pdf_names){
@@ -46,8 +43,15 @@ df <- df %>%
 #   img_new <- image_transparent(image_median(image_contrast(img1), radius=3), 'white')
 #   image_write(img_new, path = paste0(substr(i, 1, nchar(i)-4), '_new.png'), format = "png")
 # }
-# 
-df$LocalImage <- list.files(path='img/', pattern='*_new.png', full.names = TRUE)
+
+breed_rank_all$LocalImage <- list.files(path='img/', pattern='*_new.png', full.names = TRUE)
+colnames(breed_rank_all) <- make.names(colnames(breed_rank_all), unique=TRUE)
+
+df <- merge(breed_rank_all, breed_traits, by='Breed')
+colnames(df) <- make.names(colnames(df), unique=TRUE)
+
+df <- df %>%
+  mutate(across(where(is.numeric), as.integer))
 
 ```
 
@@ -95,19 +99,18 @@ percentage.plot
 ```{r}
 
 n_topdogs <- 10
-df %>%
-  pivot_longer(contains("Rank"), names_to = "Year", values_to = "Rank") %>%
-  mutate(Year = substr(Year, 2, 5)) %>%
-  filter(Year == "2020") %>%
-  slice_min(order_by = Rank, n = n_topdogs) %>%
-  mutate(Place = order(order(Rank, decreasing=FALSE), decreasing=FALSE)) %>%
-  mutate(Order = order(Place, decreasing=TRUE)) %>%
-  select(Year, Rank, Place, Order, Breed, LocalImage) %>%
+
+breed_rank_all %>%
+  slice_min(order_by = X2020.Rank, n = n_topdogs) %>%
+  mutate(Place = as.integer(order(order(X2020.Rank, decreasing=FALSE), decreasing=FALSE))) %>%
+  mutate(Order = as.integer(order(Place, decreasing=TRUE))) %>%
+  select(X2020.Rank, Place, Order, Breed, LocalImage) %>%
   ggplot(aes(x=Place, y=Order, group=Breed, fill=Breed, label=Breed)) +
   geom_col() + 
-  geom_image(aes(image=LocalImage), size=.12) + geom_text(aes(label = Breed), nudge_y = -1) +
+  geom_image(aes(image=LocalImage), size=.12) + geom_text(aes(label = Breed), nudge_y = -1, size=2) +
   theme_minimal() + theme(axis.text.x = element_text(angle = 45, vjust = .5, hjust=1)) +
-  scale_fill_brewer(palette="Set3") + ylim(0, n_topdogs+1) +ggtitle("Top Dogs in 2020")
+  scale_fill_brewer(palette="Set3") + ylim(0, n_topdogs+1) + ggtitle("Top Dogs in 2020") + 
+  theme(axis.text.y = element_blank()) + scale_x_continuous("Place on the Podium", breaks=seq(1,n_topdogs), labels = as.character(seq(1, n_topdogs))) + ylab("") + theme(axis.text.x = element_text(angle = 0))
 
 ggsave('topdogs.png', dpi=300)
 
@@ -120,7 +123,7 @@ Let's look at the top 10 dog breeds since 2013.
 
 ```{r fig.height=11,fig.width = 20}
 
-df %>%
+breed_rank_all %>%
   pivot_longer(contains("Rank"), names_to = "Year", values_to = "Rank") %>%
   mutate(Year = substr(Year, 2, 5)) %>%
   # filter(Year > 2017) %>%
@@ -133,14 +136,104 @@ df %>%
   geom_col() + facet_wrap(~ Year, scales = "free_x", nrow=2) +
   geom_image(aes(image=LocalImage), size=.12) + geom_text(aes(label = Breed), nudge_y = -.5) +
   theme_classic() + theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) +
-  scale_fill_brewer(palette="Set3") + ylim(0, n_topdogs+1)
+  scale_fill_brewer(palette="Set3") + ylim(0, n_topdogs+1) +
+  theme(axis.text.y = element_blank()) + scale_x_continuous("Place on the Podium", breaks=seq(1,n_topdogs), labels = as.character(seq(1, n_topdogs))) + ylab("") + theme(axis.text.x = element_text(angle = 0))
   
 ```
-There are definitely some crowd favorites, like bulldogs (aw), beagles, poodles, rottweilers, boxers, the beloved weiner dog, and havenese. Chihuahuas have had their time in the sun, as have Brittanies. Pugs are starting to become more popular, holding tenth place down solid since 2016.
 
+```{r}
+
+topBreeds <- breed_rank_all %>%
+  pivot_longer(contains("Rank"), names_to = "Year", values_to = "Rank") %>%
+  mutate(Year = substr(Year, 2, 5)) %>%
+  # filter(Year > 2017) %>%
+  group_by(Year) %>%
+  slice_min(order_by = Rank, n = n_topdogs) %>%
+  select(Breed) %>%
+  .$Breed
+  
+breed_rank_all %>%
+  filter(Breed %in% topBreeds) %>%
+  pivot_longer(contains("Rank"), names_to = "Year", values_to = "Rank") %>%
+  mutate(Year = substr(Year, 2, 5)) %>%
+  ggplot(aes(x=Year, y=Rank, group=Breed)) +
+  geom_line(aes(color=Breed, linetype=Breed)) + 
+  geom_image(aes(image=LocalImage), size=.08) + 
+  theme_classic() + 
+  scale_fill_brewer(palette="Set3") +
+  scale_y_reverse() + theme(axis.text.y = element_blank())
+
+```
+
+Ok, maybe we should look at another graph without the cute pictures?
+
+```{r}
+breed_rank_all %>%
+  filter(Breed %in% topBreeds) %>%
+  pivot_longer(contains("Rank"), names_to = "Year", values_to = "Rank") %>%
+  mutate(Year = substr(Year, 2, 5)) %>%
+  ggplot(aes(x=Year, y=Rank, group=Breed)) +
+  geom_line(aes(color=Breed, linetype=Breed)) + 
+  theme_classic() + 
+  scale_fill_brewer(palette="Set3") +
+  scale_y_reverse() + theme(axis.text.y = element_blank())
+
+
+```
+
+Wow, what a comeback for the Pembroke Welsh Corgis!
+
+
+## What about the underdogs?
+
+
+```{r}
+underDogs <- breed_rank_all %>%
+  pivot_longer(contains("Rank"), names_to = "Year", values_to = "Rank") %>%
+  mutate(Year = substr(Year, 2, 5)) %>%
+  group_by(Year) %>%
+  slice_max(order_by = Rank, n = n_topdogs) %>%
+  select(Breed) %>%
+  .$Breed
+
+breed_rank_all %>%
+  filter(Breed %in% underDogs) %>%
+  pivot_longer(contains("Rank"), names_to = "Year", values_to = "Rank") %>%
+  mutate(Year = substr(Year, 2, 5)) %>%
+  ggplot(aes(x=Year, y=Rank, group=Breed)) +
+  geom_line(aes(color=Breed, linetype=Breed)) + 
+  geom_image(aes(image=LocalImage), size=.08) + 
+  theme_classic() + 
+  scale_fill_brewer(palette="Set3") +
+  scale_y_reverse() + theme(axis.text.y = element_blank())
+
+ggsave('underdogs.png', dpi=300)
+
+```
+
+
+```{r}
+
+breed_rank_all %>%
+  filter(Breed %in% underDogs) %>%
+  pivot_longer(contains("Rank"), names_to = "Year", values_to = "Rank") %>%
+  mutate(Year = substr(Year, 2, 5)) %>%
+  ggplot(aes(x=Year, y=Rank, group=Breed)) +
+  geom_line(aes(color=Breed, linetype=Breed)) + 
+  theme_classic() + 
+  scale_fill_brewer(palette="Set3") +
+  scale_y_reverse() + theme(axis.text.y = element_blank())
+
+```
+
+```{r}
+unique(df$Breed)
+```
 
 
 ## What are the most important traits for predicting the overall ranking in 2020?
+
+Work in progress - still figuring out the merge :)
 
 Using random forest, we can see how important the different traits are for the 2020 ranking.
 
