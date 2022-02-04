@@ -8,7 +8,7 @@ output: html_document
 ## Questions
 1. Which dog breeds are the most popular? Has this changed over the past several years?
 2. What attributes are most important for predicting dog breed rankings?
-3. How do the top 5 dog breeds score on those key attributes?
+3. How do the top dog breeds score on those key attributes?
 
 Data obtained from [https://github.com/rfordatascience/tidytuesday/tree/master/data/2022/2022-02-01](TidyTuesday repository on Github.)
 
@@ -141,11 +141,12 @@ breed_rank_all %>%
   select(Year, Rank, Place, Order, Breed, LocalImage) %>%
   ggplot(aes(x=Place, y=Order, group=Breed, fill=Breed, label=Breed)) +
   geom_col() + facet_wrap(~ Year, scales = "free_x", nrow=2) +
-  geom_image(aes(image=LocalImage), size=.12) + geom_text(aes(label = Breed), nudge_y = -.5) +
+  geom_image(aes(image=LocalImage), size=.12) + geom_text(aes(label = Breed), angle=90, nudge_y = 1, hjust="left", size=3) +
   theme_classic() + theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) +
-  scale_fill_brewer(palette="Set3") + ylim(0, n_topdogs+1) +
+  scale_fill_brewer(palette="Set3") + ylim(0, n_topdogs+4) + 
   theme(axis.text.y = element_blank()) + scale_x_continuous("Place on the Podium", breaks=seq(1,n_topdogs), labels = as.character(seq(1, n_topdogs))) + ylab("") + theme(axis.text.x = element_text(angle = 0))
   
+ggsave("topdogs_allyears.png", dpi=300, width=22, height=12, units="in")
 ```
 
 ```{r}
@@ -170,7 +171,34 @@ breed_rank_all %>%
   scale_fill_brewer(palette="Set3") +
   scale_y_reverse() + theme(axis.text.y = element_blank())
 
+breed_rank_all %>%
+  filter(Breed %in% topBreeds) %>%
+  pivot_longer(contains("Rank"), names_to = "Year", values_to = "Rank") %>%
+  mutate(Year = substr(Year, 2, 5)) %>%
+  ggplot(aes(x=Year, y=Rank, group=Breed)) +
+  geom_line(aes(color=Breed, linetype=Breed)) + 
+  geom_image(aes(image=LocalImage), size=.08) + 
+  theme_classic() + 
+  scale_fill_brewer(palette="Set3") +
+  scale_y_reverse() + ylim(10, 0) + theme(axis.text.y = element_blank())
+
 ggsave("topdogs_year.png", dpi=300)
+
+```
+
+```{r}
+breed_rank_all %>%
+  filter(Breed == "Pembroke Welsh Corgis") %>%
+  pivot_longer(contains("Rank"), names_to = "Year", values_to = "Rank") %>%
+  mutate(Year = substr(Year, 2, 5)) %>%
+  ggplot(aes(x=Year, y=Rank, group=Breed)) +
+  geom_line(aes(color=Breed, linetype=Breed)) + 
+  geom_image(aes(image=LocalImage), size=.08) + 
+  theme_classic() + 
+  scale_fill_brewer(palette="Set3") +
+  scale_y_reverse() +ggtitle("Corgis making a comeback!")
+
+ggsave("corgis.png", dpi=300)
 
 ```
 
@@ -185,8 +213,9 @@ breed_rank_all %>%
   geom_line(aes(color=Breed, linetype=Breed)) + 
   theme_classic() + 
   scale_fill_brewer(palette="Set3") +
-  scale_y_reverse() + theme(axis.text.y = element_blank())
+  scale_y_reverse() + ylim(10, 0) + theme(axis.text.y = element_blank())
 
+ggsave("topdogs_year2.png", dpi=300)
 
 ```
 
@@ -214,7 +243,7 @@ breed_rank_all %>%
   geom_image(aes(image=LocalImage), size=.08) + 
   theme_classic() + 
   scale_fill_brewer(palette="Set3") +
-  scale_y_reverse() + theme(axis.text.y = element_blank())
+  scale_y_reverse() + ylim(150, length(breed_rank_all$Breed))#+ theme(axis.text.y = element_blank())
 
 ggsave('underdogs.png', dpi=300)
 
@@ -231,8 +260,9 @@ breed_rank_all %>%
   geom_line(aes(color=Breed, linetype=Breed)) + 
   theme_classic() + 
   scale_fill_brewer(palette="Set3") +
-  scale_y_reverse() + theme(axis.text.y = element_blank())
+  scale_y_reverse() + ylim(150, length(breed_rank_all$Breed)) #+ theme(axis.text.y = element_blank())
 
+ggsave("underdogs2.png", dpi=300)
 ```
 
 ```{r}
