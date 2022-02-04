@@ -33,18 +33,25 @@ breed_rank_all <- readr::read_csv('https://raw.githubusercontent.com/rfordatasci
 # breed_rank_all$BreedID <- substr(breed_rank_all$Breed, 1, 6)
 # breed_traits$BreedID <- substr(breed_traits$Breed, 1, 5)
 
-# pdf_names <- paste0("img/", breed_rank_all$Breed, ".jpg")
+pdf_names <- paste0("img/", breed_rank_all$Breed, ".jpg")
 # safe_download <- safely(~ download.file(.x , .y))
 # walk2(breed_rank_all$Image, pdf_names, safe_download)
 # 
 # 
-# for (i in pdf_names){
+# for (i in sort(pdf_names)){
 #   img1 <- image_read(i, 'bw')
 #   img_new <- image_transparent(image_median(image_contrast(img1), radius=3), 'white')
 #   image_write(img_new, path = paste0(substr(i, 1, nchar(i)-4), '_new.png'), format = "png")
+#   
 # }
 
-breed_rank_all$LocalImage <- list.files(path='img/', pattern='*_new.png', full.names = TRUE)
+breed_rank_all <- breed_rank_all %>%
+  arrange(Breed) %>%
+  mutate(LocalImage = list.files(path='img', pattern='*_new.png', full.names = TRUE))
+
+breed_rank_all %>%
+  select(Breed, LocalImage)
+
 colnames(breed_rank_all) <- make.names(colnames(breed_rank_all), unique=TRUE)
 
 df <- merge(breed_rank_all, breed_traits, by='Breed')
